@@ -1,5 +1,13 @@
 Revision history for Perl extension HTML::DWT.
 
+2.08  Thu Mar  23 12:53:15 2002
+	- Bugfix: fixed Regex in Library includes; library files now parsed
+	- Functionality additions:
+		- added path option to new()
+		- added xml option to new()
+	- update to test suite
+	- update to POD documentation
+
 2.07  Tue Mar  05 22:23:55 2002
 	- Functionality additions:
     	- added associate functionality to new(); HTML::DWT object

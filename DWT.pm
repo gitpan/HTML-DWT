@@ -1,8 +1,6 @@
 package HTML::DWT;
 #############################################################
-#  HTML::DWT
-#  Whyte.Wolf DreamWeaver HTML Template Module
-#  Version 2.07
+#  Version 2.08
 #
 #  Copyright (c) 2002 by S.D. Campbell <whytwolf@spots.ab.ca>
 #
@@ -30,6 +28,9 @@ package HTML::DWT;
 
 use Exporter;
 use Carp;
+use File::Find;
+use File::Basename;
+use XML::Simple;
 
 @ISA = qw(Exporter);
 @EXPORT = qw(fillTemplate fill export);
@@ -39,9 +40,10 @@ use Carp;
 	);
 
 use strict;
-use vars qw($errmsg $VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS $NOTICE %DWT_FIELDS %DWT_VALUES);
+use vars qw($errmsg $VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS 
+	    $NOTICE %DWT_FIELDS %DWT_VALUES $fname $filepath @search);
 
-$VERSION = '2.07';
+$VERSION = '2.08';
 
 $NOTICE = "\n<!-- Generated using HTML::DWT version " . $VERSION . " -->\t\t\n";
 $NOTICE .= "<!-- HTML::DWT Copyright (c) 2001,2002 Sean Campbell -->\t\n";
@@ -53,6 +55,9 @@ $NOTICE .= "<!-- or by going to http://www.cpan.org -->\n";
 %DWT_VALUES = ();
 
 $errmsg = "";
+$fname = '';
+$filepath = '';
+@search = ();
 
 #############################################################
 # new
@@ -64,6 +69,7 @@ $errmsg = "";
 sub new {
     my $class = shift;
     my %params = @_;
+    
 
     my $self = {};
     
@@ -73,7 +79,6 @@ sub new {
     
     $$self{filename} = $params{filename};
     $$self{option} = $params{option};
-    $$self{path} = $params{path};
     $$self{template} = '';
     $$self{filter} = $params{filter};
     
@@ -98,8 +103,60 @@ sub new {
 	$$self{associate} = undef;
     }
 
-    unless(open(TEMPLATE_FILE, $$self{filename})){
-	$errmsg = "HTML::DWT--Template File $$self{filename} not opened: $!\n";
+	if (exists($params{xml})){
+    		$$self{xml} = $params{xml};
+    } else {
+	$$self{xml} = undef;
+    }
+
+	
+    if (exists($params{path})){
+	if (ref($params{path}) ne 'ARRAY') {
+    		$$self{path} = [ $params{path} ];
+    	}
+    	$$self{path} = $params{path};
+    } else {
+	$$self{path} = './';
+    }
+
+    foreach my $path ($$self{path}){
+    	push @search, $path;
+    }
+    
+    if ($ENV{'HTML_TEMPLATE_ROOT'}) {
+    	my $temproot = $ENV{'HTML_TEMPLATE_ROOT'};
+	push @search, $temproot;
+    }
+    
+    if ($ENV{'DOCUMENT_ROOT'}) {
+    	my $docroot = $ENV{'DOCUMENT_ROOT'};
+	push @search, $docroot;
+    }
+   
+    
+    if (substr($$self{filename}, 0, 1) ne '/') {
+    	$fname = $$self{filename};
+	foreach my $dir (@search){
+	    	find(\&_wanted, $dir);
+	}
+	if (!$filepath) {
+		$filepath = $$self{filename};
+	}
+    } elsif (substr($$self{filename}, 0, 10) eq '/Templates') {
+    	my ($name, $path, $suffix) = fileparse($$self{filename}, '\.dwt');
+	$fname = $name . $suffix;
+	foreach my $dir (@search){
+	    	find(\&_wanted, $dir);
+	}
+	if (!$filepath) {
+		$filepath = $$self{filename};
+	}
+    } else {
+    	$filepath = $$self{filename};
+    }
+
+    unless(open(TEMPLATE_FILE, $filepath)){
+	$errmsg = "HTML::DWT--Template File $filepath not opened: $!\n";
 	return undef;
     }
 
@@ -111,9 +168,13 @@ sub new {
     $$self{html} =~ s/<html>/_beginTemplate($$self{filename})/ie;
     $$self{html} =~ s/<\/html>/_endTemplate()/ie;
     $$self{html} =~ s/<!--\s*#BeginEditable\s*\"(\w*)\"\s*-->?/_quoteReplace($1)/ieg;
-    $$self{html} =~ s/<!--\s*#BeginLibraryItem\s*\"(\w*)\"\s*-->?/_lbiquoteReplace($1)/ieg;
 
     bless $self, $class;
+	
+	if (exists($$self{associate}) || exists($$self{xml})){
+		$self->_load();
+	}
+	
     return $self;
 }
 
@@ -171,14 +232,6 @@ sub output {
     my $self = shift;
 	my %params = @_;
 
-    if ($$self{associate}){
-       	foreach my $query ($$self{associate}){
-		foreach my $param ($query->param) {
-			$self->param($param => $query->param($param));
-   		}
-    	}
-    }
-
     if ($$self{case_sensitive} == 1){
     	foreach my $key (keys %DWT_VALUES) {
 		$$self{html}=~s/<!--\s*#BeginEditable\s*($key)\s*-->?(.*?)<?!--\s*#EndEditable\s*-->/_keyReplace($DWT_VALUES{$key},$1)/egs;
@@ -190,7 +243,8 @@ sub output {
     }
 
     if($$self{no_includes} == 0) {
-    	$$self{html} =~ s/<!--\s*#BeginLibraryItem\s*(\w*)\s*-->?(.*?)<?!--\s*#EndLibraryItem\s*-->/_lbiInclude($1)/ieg;
+       	$$self{html} =~ s/<!--\s*#BeginLibraryItem\s*\"(.*?)\"\s*-->?/_lbiquoteReplace($1)/ieg;
+    	$$self{html} =~ s/<!--\s*#BeginLibraryItem\s*(.*?)\s*-->?(.*?)<?!--\s*#EndLibraryItem\s*-->/_lbiInclude($1)/iegs;
     }
     
     if ($params{'print_to'}){
@@ -221,7 +275,7 @@ sub param {
     } else {
 		my %params = @_;   
     	foreach my $key (keys %params) {
-		if ($key eq 'doctitle' && !($params{$key}=~/<title>(\w*)<\/title>/i)){
+		if ($key eq 'doctitle' && !($params{$key}=~/^\s*<title>(.*?)<\/title>/is)){
 		    $DWT_VALUES{'doctitle'} = "<title>" . $params{$key} . "</title>";
 		} else {
 		    $DWT_VALUES{$key} = $params{$key};
@@ -278,6 +332,10 @@ sub export {
     my $filename = '';
     
     $self->output();
+	
+	if (!$output) {
+		$output = 'xml';
+	}
 		
     if ($type eq 'er') {
     	$xmlcont = _xmler($$self{filename});
@@ -300,6 +358,7 @@ sub export {
 	} else {
         return $xmlcont;
     }
+	
 }
 
 #############################################################
@@ -371,10 +430,33 @@ sub _lbiquoteReplace {
 
 sub _lbiInclude {
     my $file = shift;
+    
+    if (substr($file, 0, 1) ne '/') {
+    	$fname = $file;
+	foreach my $dir (@search){
+	    	find(\&_wanted, $dir);
+	}
+	if (!$filepath) {
+		$filepath = $file;
+	}
+    } elsif (substr($file, 0, 8) eq '/Library') {
+    	my ($name, $path, $suffix) = fileparse($file, '\.lbi');
+	$fname = $name . $suffix;
+	foreach my $dir (@search){
+	    	find(\&_wanted, $dir);
+	}
+	if (!$filepath) {
+		$filepath = $file;
+	}
+    } else {
+    	$filepath = $file;
+    }
+    
+    
     my $lbi = "<!-- #BeginLibraryItem \"$file\" -->\n";
     
-    unless(open(LBI_FILE, $file)){
-	$errmsg = "HTML::DWT--Included Library File $file not opened: $!\n";
+    unless(open(LBI_FILE, $filepath)){
+	$errmsg = "HTML::DWT--Included Library File $filepath not opened: $!\n";
 	return $errmsg;
     }
 
@@ -398,11 +480,11 @@ sub _xmldw {
     my $filename = shift;
     my $xmlcont = "<?xml version=\"1.0\"?>\n<templateItems template=\"$filename\">\n";
     
-    foreach my $key (keys %DWT_FIELDS){
+    foreach my $key (sort keys %DWT_FIELDS){
     	$xmlcont .= "<item name=\"$key\"><![CDATA[$DWT_VALUES{$key}]]></item>\n";
     }
     
-    $xmlcont .= "</templateItems>";
+    $xmlcont .= "</templateItems>\n";
             
     return $xmlcont;
 }
@@ -414,7 +496,8 @@ sub _xmldw {
 
 sub _xmler {
     my $filename = shift;
-	my $name = 'TEST';
+    my ($name, $path, $suffix) = fileparse($filename, '\.dwt');
+
     my $xmlcont = "<?xml version=\"1.0\"?>\n<$name template=\"$filename\">\n";
     
     foreach my $key (keys %DWT_VALUES){
@@ -425,6 +508,48 @@ sub _xmler {
             
     return $xmlcont;
 }
+
+#############################################################
+# _wanted
+#
+#  Finds the path to a file if it exists.
+
+sub _wanted {
+    
+    /$fname$/ or return;
+    $filepath = $File::Find::name;
+    
+}
+
+#############################################################
+# _load
+#
+#  Loads the parameters from external sources
+
+sub _load {
+
+    my $self = shift;
+
+    if ($$self{associate}){
+       	foreach my $query ($$self{associate}){
+			foreach my $param ($query->param) {
+				$self->param($param => $query->param($param));
+   			}
+    	}
+    }
+
+	if ($$self{xml}) {
+		my $xs = new XML::Simple(keeproot => 1);
+		my $ref = $xs->XMLin($$self{xml});
+		my $items = $ref->{templateItems}->{item};
+		foreach my $item (keys %$items){
+			$self->param($item => $ref->{templateItems}->{item}->{$item}->{content});
+		}
+	
+	}
+
+}
+
 
 1;
 __END__
@@ -437,7 +562,7 @@ HTML::DWT - DreamWeaver HTML Template Module
 
 =head2 Unzip/tar the archive:
 
-  tar xvfz HTML-DWT-2.07
+  tar xvfz HTML-DWT-2.08
 
 =head2 Create the makefile
 
@@ -498,6 +623,8 @@ HTML::Template for more details.  It is best to require a version of
 		associate => $q,
 		case_sensitive => 1,
 		no_includes => 1,
+		path => '/var/www/html',
+		xml => $xml-data,
 		);
 
 Creates and returns a new HTML::DWT object based on the Dreamweaver
@@ -505,6 +632,7 @@ template 'file.dwt' (can specify a relative or absolute path).  The
 Second instance is recommended, although the first style is still 
 supported for backwards compatability with versions before 2.05.
 
+B<associate>:
 The associate option allows the template to inherit parameter
 values from other objects.  The object associated with the template
 must have a param() method which works like HTML::DWT's param().
@@ -512,12 +640,14 @@ Both CGI and HTML::Template fit this profile.  To associate another
 object, create it and pass the reference scalar to HTML::DWT's new() 
 method under the associate option (see above).
 
+B<case_sensitive>:
 The case_sensitive option allows HTML::DWT to treat template fields 
 in a case-sensitive manner.  HTML::DWT's default behavior is to match 
 all fields in a case-insensitive manner (i.e. doctitle is considered
 the same as DOCTITLE or DocTitle). Set case_sensitive to 1 to over-
 ride this default behavior.
 
+B<no_includes>:
 HTML::DWT will by default look for any included Dreamweaver library
 item files (.lbi files) that may be specified in the template using 
 the <!-- #BeginLibraryItem "file.lbi" -> field.  The module will open
@@ -525,11 +655,32 @@ the specified library file and will include the file's contents in
 the generated HTML.  Setting no_includes to 1 will over-ride this 
 default behavior.
 
-Additional options may be passed to the constructor to emulate 
-HTML::Template behavior (see that module's documentation) although
-only filename, associate, case_sensitive and no_includes are supported 
-as of HTML::DWT version 2.07.
+B<path>:
+HTML::DWT will accept an array of paths under which it will look for
+template and library files. The module will also look in directories
+specified by the environment variables $HTML_TEMPLATE_ROOT and 
+$DOCUMENT_ROOT.  Absolute path names are not checked, although
+the pseudo-paths '/Library/' and '/Templates/' are treated as
+relative paths.
 
+B<xml>:
+HTML::DWT will accept a string value containing an XML document that 
+conforms to the HTML-DWT DTD.  This string may be associated with 
+the template object through the XML option in the constructor.  Each
+<item> tag in the XML document will have its contents loaded into
+a corresponding template field.  A valid HTML-DWT XML document will
+look like this:
+
+  <?xml version="1.0"?>
+  <templateItems template="/Templates/temp.dwt">
+    <item name="centercont"><![CDATA[Testing]]></item>
+    <item name="doctitle"><![CDATA[<title>testing</title>]]></item>
+    <item name="leftcont"><![CDATA[Testing]]></item>
+    <item name="rightcont"><![CDATA[Testing]]></item>
+  </templateItems>
+
+These documents can be automaticly generated both by HTML::DWT based 
+on template data using export(), or by Macromedia Dreamweaver.
 
 =head2 fill()
 
@@ -593,8 +744,9 @@ Returns the parsed template and its substituted HTML for output.
 The template must be filled using either fill() or param() before
 calling output().
 
+B<print_to>:
 Alternativly, by passing a filehandle reference to output()'s 
-B<print_to> option you may output the template content directly to
+print_to option you may output the template content directly to
 that filehandle.  In this case output() returns an undefined value.
 
 This is a HTML::Template compatible method.
@@ -603,29 +755,35 @@ This is a HTML::Template compatible method.
 
   $template->export(
                     type  => 'dw',
-		    output => 'file',
-		    filename => 'dwt.xml',
-		    print_to => \*STDOUT
-		    );
+		    		output => 'file',
+		    		filename => 'dwt.xml',
+		    		print_to => \*STDOUT
+		    		);
 
 This method exports the filled template data to an XML file format.
+
+B<type>:
 Dreamweaver supports two XML styles for templates, the Dreamweaver style,
-and another standardized style.  'dw', the type flag for the Dreamweaver
-style is the default setting for export(), although you may change that by
-using the B<type> option and passing it either 'dw' or 'er'.
+and another standardized style using editable region name tags.  'dw', the 
+type flag for the Dreamweaver style is the default setting for export(), 
+although you may change that by using the type option and passing it either 
+'dw' or 'er'.
 
+B<output>:
 If no output style is indicated, export() will return the XML document. 
-Output may be sent to a file, in which case the B<output> option is passed
+Output may be sent to a file, in which case the output option is passed
 the value 'file', or output may be sent to an open filehandle, in which case 
-B<output> is passed a 'FH' value.
+output is passed a 'FH' value.
 
-If sending output to a file, the B<filename> option musst be included with
+B<filename>:
+If sending output to a file, the filename option musst be included with
 a valid filename (absolute or relative paths are acceptable).  Export will 
 return the filename, or undefined on an error.  Error messages are stored in
 $HTML::DWT::errmsg.
 
-If sending output to a filehandle instead of using the B<filename> option
-, pass a reference to a filehandle to the B<print_to> option.  For convienience
+B<print_to>:
+If sending output to a filehandle instead of using the B<filename> option, 
+pass a reference to a filehandle to the print_to option.  For convienience
 of use with CGI scripts, export() will include a 'Content-type: text/xml' 
 header before the XML document when outputting to a filehandle.  When sending
 output to a filehandle export() returns undefined.
@@ -660,19 +818,6 @@ This message is stored in $HTML::DWT::errmsg
 
 No known bugs, but if you find any please contact the author.
 
-=head1 COMPATABILITY NOTES
-
-HTML:DWT is moving towards supporting much, if not all of the
-functionality of HTML::Template for Dreamweaver templates.  Not
-All HTML::Template functionality is fully supported yet, and 
-while the HTML::Template documentation should be the reference
-source for all HTML::Template compatible methods and functions, 
-only those methods documented as being supported, and the manner 
-of their support as documented in HTML::DWT are actually supported 
-by this module.
-
-In plain english--RT(HTML:DWT)M and use it. :)
-
 If you would like to assist in the development of this module, please
 contact the author.
 
@@ -682,7 +827,7 @@ S.D. Campbell, whytwolf@spots.ab.ca
 
 =head1 SEE ALSO
 
-perl(1), HTML::Template, HTML::LBI.
+perl(1), HTML::Template, HTML::LBI, CGI.pm.
 
 =head1 LICENSE
 
