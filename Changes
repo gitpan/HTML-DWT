@@ -1,0 +1,38 @@
+Revision history for Perl extension HTML::DWT.
+
+2.06  Fri Mar  01 20:42:22 2002
+	- Bugfix: added Use Carp to support carp() warnings
+	- Functionality additions:
+		- added query(); this implements the same method inter-
+		  face as HTML::Template's query() method.
+		- completed param() functionality to bring it in line
+		  with HTML::Template's param() method
+		- moved actual field replacement regex to output() where
+		  it makes more sense.  Made fill() call param() and then
+		  output()
+		- parse() now accepts 'doctitle' fields without <title> tags;
+		  it will DTRT if <title> tags are required
+	- Update to POD documentation
+
+2.05  Thu Feb  28 17:59:55 2002
+	- Major functionality changes:
+		- added fill() to better support standard function
+		  naming schemes
+		- fillTemplate() calls fill() now
+		- added parse(), and output() as well as :Template
+		  option to support HTML::Template-style functionality
+		- fill() dereferences it's hash and calls param()
+		  (not sure if that's efficient, but looks cleaner to me)
+	- Update to POD documentation
+
+2.04  Tue Feb  12 12:10:55 2002
+	- Minor bugfixes
+
+2.03.02  Tue Feb  12 10:12:30 2002
+	- Added POD documentation
+	- changed toplevel namespace (to get added to CPAN)
+
+2.03.01  Mon Feb  4 16:56:43 2002
+	- Release version packaged (minor bugs fixed)
+	
+
