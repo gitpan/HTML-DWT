@@ -4,7 +4,7 @@ NAME
 INSTALLATION
   Unzip/tar the archive:
 
-      tar xvfz HTML-DWT-2.06
+      tar xvfz HTML-DWT-2.07
 
   Create the makefile
 
@@ -19,8 +19,11 @@ INSTALLATION
 SYNOPSIS
       use HTML::DWT;
       
-      $template = new HTML::DWT(filename => "file.html");    
-      %dataHash = (doctitle => '<title>DWT Generated</title>');  
+      $template = new HTML::DWT(filename => "file.dwt");    
+      %dataHash = (
+                    doctitle => 'DWT Generated',
+                    leftcont => 'some HTML content here'    
+                    );  
       $html = $template->fill(\%dataHash);
       
       or
@@ -29,7 +32,7 @@ SYNOPSIS
       
       $template = new HTML::DWT(filename => "file.dwt");
       $template->param(
-                       doctitle => '<title>DWT Generated</title>'
+                       doctitle => '<title>DWT Generated</title>',
                        leftcont => 'Some HTML content here'
                        );
       $html = $template->output();
@@ -54,7 +57,12 @@ METHODS
 
       new HTML::DWT("file.dwt");
 
-      new HTML::DWT(filename => "file.dwt");
+      new HTML::DWT(
+                    filename => "file.dwt",
+                    associate => $q,
+                    case_sensitive => 1,
+                    no_includes => 1,
+                    );
 
     Creates and returns a new HTML::DWT object based on the
     Dreamweaver template 'file.dwt' (can specify a relative or
@@ -62,10 +70,31 @@ METHODS
     first style is still supported for backwards compatability with
     versions before 2.05.
 
+    The associate option allows the template to inherit parameter
+    values from other objects. The object associated with the
+    template must have a param() method which works like HTML::DWT's
+    param(). Both CGI and HTML::Template fit this profile. To
+    associate another object, create it and pass the reference
+    scalar to HTML::DWT's new() method under the associate option
+    (see above).
+
+    The case_sensitive option allows HTML::DWT to treat template
+    fields in a case-sensitive manner. HTML::DWT's default behavior
+    is to match all fields in a case-insensitive manner (i.e.
+    doctitle is considered the same as DOCTITLE or DocTitle). Set
+    case_sensitive to 1 to over- ride this default behavior.
+
+    HTML::DWT will by default look for any included Dreamweaver
+    library item files (.lbi files) that may be specified in the
+    template using the <!-- #BeginLibraryItem "file.lbi" -> field.
+    The module will open the specified library file and will include
+    the file's contents in the generated HTML. Setting no_includes
+    to 1 will over-ride this default behavior.
+
     Additional options may be passed to the constructor to emulate
     HTML::Template behavior (see that module's documentation)
-    although only filename is supported as of HTML::DWT version
-    2.05.
+    although only filename, associate, case_sensitive and
+    no_includes are supported as of HTML::DWT version 2.07.
 
   fill()
 
@@ -88,7 +117,7 @@ METHODS
       $template->param('doctitle');
 
       $template->param(
-                      doctitle => '<title>DWT Generated</title>'
+                      doctitle => '<title>DWT Generated</title>',
                       leftcont => 'Some HTML content here'
                       );
 
@@ -111,15 +140,64 @@ METHODS
 
     This is a HTML::Template compatible method.
 
+  clear_params()
+
+      $template->clear_params();
+
+    Clears all field values from the template's parameter list and
+    sets each parameter to an undefined value.
+
+    This is a HTML::Template compatible method.
+
   output()
 
       $template->output();
+      
+      $template->output(print_to => \*STDOUT);
 
     Returns the parsed template and its substituted HTML for output.
     The template must be filled using either fill() or param()
     before calling output().
 
+    Alternativly, by passing a filehandle reference to output()'s
+    print_to option you may output the template content directly to
+    that filehandle. In this case output() returns an undefined
+    value.
+
     This is a HTML::Template compatible method.
+
+  export()
+
+      $template->export(
+                        type  => 'dw',
+                        output => 'file',
+                        filename => 'dwt.xml',
+                        print_to => \*STDOUT
+                        );
+
+    This method exports the filled template data to an XML file
+    format. Dreamweaver supports two XML styles for templates, the
+    Dreamweaver style, and another standardized style. 'dw', the
+    type flag for the Dreamweaver style is the default setting for
+    export(), although you may change that by using the type option
+    and passing it either 'dw' or 'er'.
+
+    If no output style is indicated, export() will return the XML
+    document. Output may be sent to a file, in which case the output
+    option is passed the value 'file', or output may be sent to an
+    open filehandle, in which case output is passed a 'FH' value.
+
+    If sending output to a file, the filename option musst be
+    included with a valid filename (absolute or relative paths are
+    acceptable). Export will return the filename, or undefined on an
+    error. Error messages are stored in $HTML::DWT::errmsg.
+
+    If sending output to a filehandle instead of using the filename
+    option , pass a reference to a filehandle to the print_to
+    option. For convienience of use with CGI scripts, export() will
+    include a 'Content-type: text/xml' header before the XML
+    document when outputting to a filehandle. When sending output to
+    a filehandle export() returns undefined.
 
   query()
 

@@ -1,8 +1,9 @@
-COPYING
 Changes
+COPYING
 DWT.html
 DWT.pm
-MANIFEST
 Makefile.PL
+MANIFEST
 README
 test.pl
+tmp/temp.dwt

@@ -4,6 +4,10 @@ use ExtUtils::MakeMaker;
 WriteMakefile(
     'NAME'		=> 'HTML::DWT',
     'VERSION_FROM'	=> 'DWT.pm', # finds $VERSION
-    'PREREQ_PM'		=> {}, # e.g., Module::Name => 1.1
-    'realclean' => {FILES => 'pod2html-*'}
+    'PREREQ_PM'		=> {
+    			    Carp => 0.0,
+    			    Test::More => 0.18,
+			    }, 
+    'AUTHOR'		=> 'Sean Campbell <whytwolf@spots.ab.ca>',
+    'realclean' 	=> {FILES => 'pod2html-*'}
 );

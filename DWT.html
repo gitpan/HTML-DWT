@@ -28,7 +28,9 @@
 		<LI><A HREF="#new_">new()</A>
 		<LI><A HREF="#fill_">fill()</A>
 		<LI><A HREF="#param_">param()</A>
+		<LI><A HREF="#clear_params_">clear_params()</A>
 		<LI><A HREF="#output_">output()</A>
+		<LI><A HREF="#export_">export()</A>
 		<LI><A HREF="#query_">query()</A>
 	</UL>
 
@@ -54,7 +56,7 @@ HTML::DWT - DreamWeaver HTML Template Module
 <HR>
 <H2><A NAME="Unzip_tar_the_archive_">Unzip/tar the archive:</A></H2>
 <P>
-<PRE>  tar xvfz HTML-DWT-2.06
+<PRE>  tar xvfz HTML-DWT-2.07
 </PRE>
 <P>
 <HR>
@@ -76,8 +78,11 @@ HTML::DWT - DreamWeaver HTML Template Module
 <P>
 <PRE>  use HTML::DWT;
   
-  $template = new HTML::DWT(filename =&gt; &quot;file.html&quot;);    
-  %dataHash = (doctitle =&gt; '&lt;title&gt;DWT Generated&lt;/title&gt;');  
+  $template = new HTML::DWT(filename =&gt; &quot;file.dwt&quot;);    
+  %dataHash = (
+                doctitle =&gt; 'DWT Generated',
+                leftcont =&gt; 'some HTML content here'    
+                );  
   $html = $template-&gt;fill(\%dataHash);
   
   or
@@ -86,7 +91,7 @@ HTML::DWT - DreamWeaver HTML Template Module
   
   $template = new HTML::DWT(filename =&gt; &quot;file.dwt&quot;);
   $template-&gt;param(
-                   doctitle =&gt; '&lt;title&gt;DWT Generated&lt;/title&gt;'
+                   doctitle =&gt; '&lt;title&gt;DWT Generated&lt;/title&gt;',
                    leftcont =&gt; 'Some HTML content here'
                    );
   $html = $template-&gt;output();
@@ -121,7 +126,12 @@ for HTML::DWT to support this option.
 <PRE>  new HTML::DWT(&quot;file.dwt&quot;);
 </PRE>
 <P>
-<PRE>  new HTML::DWT(filename =&gt; &quot;file.dwt&quot;);
+<PRE>  new HTML::DWT(
+                filename =&gt; &quot;file.dwt&quot;,
+                associate =&gt; $q,
+                case_sensitive =&gt; 1,
+                no_includes =&gt; 1,
+                );
 </PRE>
 <P>
 Creates and returns a new HTML::DWT object based on the Dreamweaver
@@ -130,9 +140,34 @@ instance is recommended, although the first style is still supported for
 backwards compatability with versions before 2.05.
 
 <P>
+The associate option allows the template to inherit parameter values from
+other objects. The object associated with the template must have a
+<CODE>param()</CODE> method which works like HTML::DWT's
+<CODE>param().</CODE> Both CGI and HTML::Template fit this profile. To
+associate another object, create it and pass the reference scalar to
+HTML::DWT's <CODE>new()</CODE> method under the associate option (see
+above).
+
+<P>
+The case_sensitive option allows HTML::DWT to treat template fields in a
+case-sensitive manner. HTML::DWT's default behavior is to match all fields
+in a case-insensitive manner (i.e. doctitle is considered the same as
+DOCTITLE or DocTitle). Set case_sensitive to 1 to over- ride this default
+behavior.
+
+<P>
+HTML::DWT will by default look for any included Dreamweaver library item
+files (.lbi files) that may be specified in the template using the &lt;!--
+#BeginLibraryItem ``file.lbi'' -&gt; field. The module will open the
+specified library file and will include the file's contents in the
+generated HTML. Setting no_includes to 1 will over-ride this default
+behavior.
+
+<P>
 Additional options may be passed to the constructor to emulate
 HTML::Template behavior (see that module's documentation) although only
-filename is supported as of HTML::DWT version 2.05.
+filename, associate, case_sensitive and no_includes are supported as of
+HTML::DWT version 2.07.
 
 <P>
 <HR>
@@ -162,7 +197,7 @@ support versions of HTML::DWT earlier than version 2.05.
 </PRE>
 <P>
 <PRE>  $template-&gt;param(
-                  doctitle =&gt; '&lt;title&gt;DWT Generated&lt;/title&gt;'
+                  doctitle =&gt; '&lt;title&gt;DWT Generated&lt;/title&gt;',
                   leftcont =&gt; 'Some HTML content here'
                   );
 </PRE>
@@ -192,9 +227,24 @@ This is a HTML::Template compatible method.
 
 <P>
 <HR>
+<H2><A NAME="clear_params_">clear_params()</A></H2>
+<P>
+<PRE>  $template-&gt;clear_params();
+</PRE>
+<P>
+Clears all field values from the template's parameter list and sets each
+parameter to an undefined value.
+
+<P>
+This is a HTML::Template compatible method.
+
+<P>
+<HR>
 <H2><A NAME="output_">output()</A></H2>
 <P>
 <PRE>  $template-&gt;output();
+  
+  $template-&gt;output(print_to =&gt; \*STDOUT);
 </PRE>
 <P>
 Returns the parsed template and its substituted HTML for output. The
@@ -202,7 +252,47 @@ template must be filled using either <CODE>fill()</CODE> or
 <CODE>param()</CODE> before calling <CODE>output().</CODE>
 
 <P>
+Alternativly, by passing a filehandle reference to <CODE>output()'s</CODE> 
+<STRONG>print_to</STRONG> option you may output the template content directly to that filehandle. In
+this case <CODE>output()</CODE> returns an undefined value.
+
+<P>
 This is a HTML::Template compatible method.
+
+<P>
+<HR>
+<H2><A NAME="export_">export()</A></H2>
+<P>
+<PRE>  $template-&gt;export(
+                    type  =&gt; 'dw',
+                    output =&gt; 'file',
+                    filename =&gt; 'dwt.xml',
+                    print_to =&gt; \*STDOUT
+                    );
+</PRE>
+<P>
+This method exports the filled template data to an XML file format.
+Dreamweaver supports two XML styles for templates, the Dreamweaver style,
+and another standardized style. 'dw', the type flag for the Dreamweaver
+style is the default setting for <CODE>export(),</CODE> although you may
+change that by using the <STRONG>type</STRONG> option and passing it either 'dw' or 'er'.
+
+<P>
+If no output style is indicated, <CODE>export()</CODE> will return the XML
+document. Output may be sent to a file, in which case the <STRONG>output</STRONG> option is passed the value 'file', or output may be sent to an open
+filehandle, in which case 
+<STRONG>output</STRONG> is passed a 'FH' value.
+
+<P>
+If sending output to a file, the <STRONG>filename</STRONG> option musst be included with a valid filename (absolute or relative paths
+are acceptable). Export will return the filename, or undefined on an error.
+Error messages are stored in $HTML::DWT::errmsg.
+
+<P>
+If sending output to a filehandle instead of using the <STRONG>filename</STRONG> option , pass a reference to a filehandle to the <STRONG>print_to</STRONG> option. For convienience of use with CGI scripts, <CODE>export()</CODE>
+will include a 'Content-type: text/xml' header before the XML document when
+outputting to a filehandle. When sending output to a filehandle
+<CODE>export()</CODE> returns undefined.
 
 <P>
 <HR>
